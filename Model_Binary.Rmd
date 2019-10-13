@@ -8,12 +8,20 @@ output:
 ---
 ```{r setup, include=FALSE, cache=TRUE}
 knitr::opts_chunk$set(echo = TRUE, cache=TRUE, warning=FALSE, message=FALSE)
-library(caret);library(car);library(e1071);library(questionr);library(stats);library(glmnet);library(Matrix);
-library(foreach);library(MASS);library(tidyr);library(pROC);library(olsrr);library(corrplot);library(dummies)
-library(dplyr);library(ggplot2);library(kableExtra);library(GGally);library(mctest)
-library(outliers); library(igraph);library(randomForest);library(rpart);library(BMA)
-#setwd("C:/trabajo/2018-2019/Eafit/2do_sem/Metodos_Avanzados/Competencia")
-setwd("C://Users/Julian Castelblanco/Desktop/Met/Competencia_Com/Binario/")
+getPkg <-function(pkg, url = "http://cran.r-project.org"){
+  to.do <- setdiff(pkg, installed.packages()[,1])
+  for(package in to.do) invisible(install.packages(package, repos = url))
+}	
+pkgs <- c("glmnet","dplyr","ggplot2","lattice","outliers","caret","ROCR","nortest","nnet",
+          "MASS","lme4","SparseM","car","leaps","rriskDistributions","easypackages","pscl",
+          "gvlma","olsrr","RcmdrMisc","BAS","BMA","corrplot","kableExtra","normtest","clusterSim","e1071",
+          "questionr","stats","Matrix","foreach","tidyr","pROC","dummies","GGally","mctest","igraph","randomForest","rpart")
+
+getPkg(pkgs)
+library(easypackages)
+libraries(pkgs)
+options(scipen=999) 
+
 ```
 # Introducción
 
@@ -36,20 +44,40 @@ Presición-*Accuracy*=$\frac{Verdaderos positivos-TP + verdaderos Negativos-TN}{
 # 1. Carga de Datos y Análisis Descriptivo 
 
 ```{r loading_data, cache=TRUE}
-dtOriginal <-read.csv("C://Users/Julian Castelblanco/Desktop/Met/Competencia_Com/Binario/databinarystudents.csv", header = TRUE, sep="," , na.strings = c("", "NA"), encoding = "UTF-8", stringsAsFactors=FALSE)
+dtOriginal <-read.csv("databinarystudents.csv", header = TRUE, sep="," , na.strings = c("", "NA"), encoding = "UTF-8", stringsAsFactors=FALSE)
 dtOriginal <- dtOriginal %>% na.omit()
 #dtOriginal$yL <-as.factor(dtOriginal$yL)
 #summary(dtOriginal)
 dtDatBinaria <- dtOriginal[2:34]
+
+## Transformación de variables
+dtDatBinaria$yL <- as.factor(dtDatBinaria$yL)
+dtDatBinaria$x3 <- as.factor(dtDatBinaria$x3)
+dtDatBinaria$x4 <- as.factor(dtDatBinaria$x4)
+dtDatBinaria$x5 <- as.factor(dtDatBinaria$x5)
+dtDatBinaria$x6 <- as.factor(dtDatBinaria$x6)
+dtDatBinaria$x7 <- as.factor(dtDatBinaria$x7)
+dtDatBinaria$x13 <- as.factor(dtDatBinaria$x13)
+dtDatBinaria$x14 <- as.factor(dtDatBinaria$x14)
+dtDatBinaria$x15 <- as.factor(dtDatBinaria$x15)
+dtDatBinaria$x16 <- as.factor(dtDatBinaria$x16)
+dtDatBinaria$x17 <- as.factor(dtDatBinaria$x17)
+dtDatBinaria$x18 <- as.factor(dtDatBinaria$x18)
+dtDatBinaria$x19 <- as.factor(dtDatBinaria$x19)
+dtDatBinaria$x20 <- as.factor(dtDatBinaria$x20)
+dtDatBinaria$x28 <- as.factor(dtDatBinaria$x28)
+dtDatBinaria$x29 <- as.factor(dtDatBinaria$x29)
 #str(dtDatBinaria)
 summary(dtDatBinaria)
 ```
+
 Al subir los datos se eliminan los registros sin datos y la variable con el identificador de cada registro. En una inspección visual de los datos se identifican varias variables que son del tipo categóricas, sin embargo, por el momento no se va a realizar ninguna operación u transformación sobre las variables, para mantener la condición inicial y realizar una análisis preliminar de los datos. 
 
 ### 1.1 Frequencias Variables Categóricas
 A continuación se presentan las tablas de frecuencias de las variables categóricas, en las que se puede apreciar que los datos están desbalanceados, por ejemplo las variables: x5, x6,x7,x14,x15,x16, x18, x19, x20, x28 y x29 tiene pocas observaciones con valor de 1, porque la mayoría de las observaciones tiene valor de 0.
 <br>
 ```{r ploting_categoricals,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE, fig.width=1.5, fig.height=1.5}
+
 par(mfrow=c(3,6))
 ggplot(dtDatBinaria, aes(x=factor(yL))) + geom_bar(stat="count", fill="steelblue") + labs(title= "yL", y="", x="")
 ggplot(dtDatBinaria, aes(x=factor(x3))) + geom_bar(stat="count", fill="steelblue") + labs(title= "x3", y="", x="")
@@ -77,7 +105,6 @@ Analizando los histogramas de frecuencias de las variables continuas se identifi
 <br>
 ```{r ploting_continuas,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
 par(mfrow=c(3,5))
-hist(dtDatBinaria$y, main = "y" , xlab = "")
 hist(dtDatBinaria$x1, main = "x1", xlab = "")
 hist(dtDatBinaria$x2, main = "x2", xlab = "")
 hist(dtDatBinaria$x8, main = "x8", xlab = "")
@@ -192,8 +219,22 @@ El menor valor de VIF es uno (1) que indica ausencia de multicolinealidad. La re
 ```{r checking_multicollinearity, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
 # Verificando la multicolinealidad
 #dtPrueba <-dtDatBinariaNotInfluencers
+###x10
+max<-qlnorm(0.975,meanlog=3.850165,sdlog=1.492197) ## máximo en 0.975
+#min<-qlnorm(0.025,meanlog=res1$fittedParams[[1]],sdlog=res1$fittedParams[[2]]) ## mínimo en 0.025
+dtDatBinariaNotInfluencers$x10<- ifelse(dtDatBinariaNotInfluencers$x10>max,max,dtDatBinariaNotInfluencers$x10)
+###x27
+max<-qgamma(0.975,shape = 2.91695510,rate= 0.03716774 ) ## máximo en 0.975
+dtDatBinariaNotInfluencers$x27<- ifelse(dtDatBinariaNotInfluencers$x27>max,max,dtDatBinariaNotInfluencers$x27)
+###x31
+max<-qbeta(0.975,shape1 = 1.303047,shape2 = 3.340890 ) ## máximo en 0.975
+dtDatBinariaNotInfluencers$x31<- ifelse(dtDatBinariaNotInfluencers$x31>max,max,dtDatBinariaNotInfluencers$x31)
+
+
 yL<-subset(dtDatBinariaNotInfluencers, select=c(yL))
 VarContinuas<- subset(dtDatBinariaNotInfluencers, select=c(x1,x2,x8,x10,x11,x12,x21,x22,x23,x24,x27,x31,x32))
+VarContinuas<-clusterSim::data.Normalization(VarContinuas,type = "n4",normalization="column")
+
 varBinarias <- subset(dtDatBinariaNotInfluencers, select=c(x3,x4,x5,x6,x7,x13,x14,x15,x16,x17,x18,x19,x20,x28,x29))
 varBinarias <- apply(varBinarias,2,as.factor)
 varDiscretas <-subset(dtDatBinariaNotInfluencers, select=c(x9,x25,x26,x30))
@@ -201,8 +242,8 @@ varDiscretas <-subset(dtDatBinariaNotInfluencers, select=c(x9,x25,x26,x30))
 dtDatinVIF <-cbind(yL, VarContinuas,varBinarias,varDiscretas)
 dtDatinVIF$yL<-as.factor(dtDatinVIF$yL)
 #Estandirizando variables continuas. Las que sean factores son ignoradas por la función.
-DatPreProc <-preProcess(dtDatinVIF,method = c("center", "scale"))
-dtDatinVIFEstandar <-predict(DatPreProc,dtDatinVIF)
+
+dtDatinVIFEstandar <-dtDatinVIF
 #Calcular VIF para todas las variables predictoras
 dfresults_VIF<-as.data.frame(vif(glm(yL~., data =dtDatinVIFEstandar, family="binomial")))
 colnames(dfresults_VIF)<-c("VIF")
@@ -220,7 +261,7 @@ kable_styling(bootstrap_options = c("striped", "hover"),full_width = F, font_siz
 ```
 Después de realizar el cálculo del VIF se identifica que las siguientes variables `r toString(varNameCollinearity)` tienen un valor de VIF superior a 5, por lo que se procederá a calcular ¿Cuál es la correlación entre estas variables? dejando solamente las que tengan un valor superior a 0.3.
 ```{r checking_multicollinearity_2, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
-dfvarNameCollinearity<-as.data.frame(abs(cor(dtDatBinaria[,varNameCollinearity])))
+dfvarNameCollinearity<-as.data.frame(abs(cor(dtDatBinaria[,varNameCollinearity[-c(8:10)]])))
 dfvarNameCollinearity<-as.data.frame(apply(dfvarNameCollinearity,2,function(x) ifelse((x<0.3 |x==1),"",round(x,3))))
 kable(dfvarNameCollinearity, digits = 2, format = "html", row.names = TRUE) %>%
 kable_styling(bootstrap_options = c("striped", "hover"),full_width = F, font_size = 12, position = "left")
@@ -254,9 +295,9 @@ Previo a la identificación de modelos, se procederá a aplicar la validación c
 
 ```{r particion_validacion_cruzada,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
 set.seed(123)
-inTraining <- createDataPartition(dtDatNoCollinearity$yL, p = .7, list = FALSE)
-dtBinEntrenamiento <- dtDatNoCollinearity[ inTraining,]
-dtBinPrueba <- dtDatNoCollinearity[-inTraining,]
+inTraining <- createDataPartition(dtDatinVIFEstandar$yL, p = .7, list = FALSE)
+dtBinEntrenamiento <- dtDatinVIFEstandar[ inTraining,]
+dtBinPrueba <- dtDatinVIFEstandar[-inTraining,]
 numObser_entrenamiento <- nrow(dtBinEntrenamiento)
 numObser_prueba <- nrow(dtBinPrueba)
 rocThreshold <- 0.4547
@@ -273,7 +314,7 @@ Luego de esta división de las observaciones se tiene que el subconjunto de entr
 modelBIC <- glm(yL~., data=dtBinEntrenamiento, family="binomial") %>% stepAIC(trace=FALSE, k=log(numObser_entrenamiento))
 #summary(modelBIC)
 
-predictBICPrueba <-predict(modelBIC, dtBinPrueba, type = "response")
+predictBICPrueba <-predict(modelBIC, dtBinPrueba,type="response")
 predictBICOutcomes <- ifelse(predictBICPrueba < rocThreshold,0,1) 
 table_mat <- table(predictBICOutcomes, dtBinPrueba$yL)
 accuracy_Test_BIC <- sum(diag(table_mat)) / sum(table_mat)
@@ -311,7 +352,7 @@ plot(rocPlot, print.auc=TRUE, print.thres="best")
 ```{r Ridge_regression, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
 #set.seed(123)
 train_x <-model.matrix(yL~., dtBinEntrenamiento)[,-1]
-train_y<-as.numeric(dtBinEntrenamiento$yL)
+train_y<-as.numeric(as.character(dtBinEntrenamiento$yL))
 # Realizando la Regresión Rigde
 #Encontrando el mejor lambda utilizando cross-validation
 #cv_lambda_Ridge <-cv.glmnet(train_x,train_y,alpha= 0, family="binomial")
@@ -320,7 +361,7 @@ cv_lambda_Ridge <-cv.glmnet(train_x,train_y,alpha= 0, family="binomial",standard
 #Presentar el mejor valor de Lambda
 #cv_lambda_Ridge$lambda.min
 #Entrenando el modelo utilizando Ridge regression con el mejor Lambda
-model_Ridge <- glmnet(train_x, train_y, alpha= 0, lambda=cv_lambda_Ridge$lambda.min)
+model_Ridge <- glmnet(train_x, train_y, alpha= 0, lambda=cv_lambda_Ridge$lambda.min, family="binomial")
 #coef(model_Ridge)
 variables_Ridge<-as.data.frame(as.matrix(coef(model_Ridge)))
 variables_Ridge$variables<-row.names(variables_Ridge)
@@ -328,7 +369,7 @@ variables_Ridge<-variables_Ridge[-1,]
 variables_Ridge<-variables_Ridge$variables[variables_Ridge$s0!=0]
 #Calculando las predicciones en los datos de prueba
 test_x_Ridge<- model.matrix(yL~., dtBinPrueba)[,-1]
-pred_y_Ridge <-model_Ridge %>% predict(test_x_Ridge) %>% as.vector()
+pred_y_Ridge <-model_Ridge %>% predict(test_x_Ridge,type="response") %>% as.vector()
 #Calculando las predicciones en los datos de prueba
 # Presentando las métricas de desempeño
 predict_Outcomes_Ridge <- ifelse(pred_y_Ridge < rocThreshold,0,1) 
@@ -352,7 +393,8 @@ donde $\lambda$ es el parametro de penalización, esta funcion no solo minimiza 
 ```{r lasso_regression, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
 set.seed(123)
 train_x <-model.matrix(yL~., dtBinEntrenamiento)[,-1]
-train_y<-as.numeric(dtBinEntrenamiento$yL)
+train_y<-as.numeric(as.character(dtBinEntrenamiento$yL))
+
 # Realizando la Regresión Lasso
 #Encontrando el mejor lambda utilizando cross-validation
 #lambdas_to_try <- 10^seq(-3, 5, length.out = 100)
@@ -360,7 +402,8 @@ cv_lambda_Lasso <-cv.glmnet(train_x,train_y,alpha= 0, family="binomial")
 #cv_lambda_Lasso <-cv.glmnet(train_x,train_y,alpha= 1, family="binomial", standardize = TRUE, lambda = lambdas_to_try)
 #Presentar el mejor valor de Lambd#cv_lambda_Lasso$lambda.min
 #Entrenando el modelo utilizando Lasso regression con el mejor Lambda
-model_lasso <- glmnet(train_x, train_y, alpha= 1, lambda=cv_lambda_Lasso$lambda.min)
+model_lasso <- glmnet(train_x, train_y, alpha= 1, lambda=cv_lambda_Lasso$lambda.min,family="binomial")
+listvarLasso<-names(coef(model_lasso)[,1])[-1]
 variables_lasso<-as.data.frame(as.matrix(coef(model_lasso)))
 variables_lasso$variables<-row.names(variables_lasso)
 variables_lasso<-variables_lasso[-1,]
@@ -368,10 +411,10 @@ variables_lasso<-variables_lasso$variables[variables_lasso$s0!=0]
 #listvarLasso<-names(coef(model_lasso)[,1])[-1]
 #Calculando las predicciones en los datos de prueba
 test_x_Lasso<- model.matrix(yL~., dtBinPrueba)[,-1]
-pred_y_Lasso <-model_lasso %>% predict(test_x_Lasso) %>% as.vector()
+pred_y_Lasso <-model_lasso %>% predict(test_x_Lasso,type="response") %>% as.vector()
 #Calculando las predicciones en los datos de prueba
 # Presentando las métricas de desempeño
-predict_Outcomes_Lasso <- ifelse(pred_y_Lasso < rocThreshold,0,1) 
+predict_Outcomes_Lasso <- ifelse(pred_y_Lasso < 0.6,0,1) 
 table_mat <- table(predict_Outcomes_Lasso, dtBinPrueba$yL)
 accuracy_Test_Lasso <- sum(diag(table_mat)) / sum(table_mat)
 par(mfcol=c(1,1))
@@ -395,8 +438,8 @@ optimal_lambda<-optimal__param_elastic$bestTune$lambda
 #Entrenando el modelo utilizando Elastic Net regression con el mejor Lambda y el mejor Alpha
 set.seed(123)
 test_x <- model.matrix(yL~., dtBinPrueba)[,-1]
-model_elastic <- glmnet(train_x, train_y, alpha= optimal_alpha, lambda=optimal_lambda)
-pred_y_elastic <-model_elastic %>% predict(test_x) 
+model_elastic <- glmnet(train_x, train_y, alpha= optimal_alpha, lambda=optimal_lambda,family="binomial")
+pred_y_elastic <-model_elastic %>% predict(test_x,type="response") %>% as.vector()
 #coef(model_elastic)
 variables_Elastic<-as.data.frame(as.matrix(coef(model_elastic)))
 variables_Elastic$variables<-row.names(variables_Elastic)
@@ -404,16 +447,15 @@ variables_Elastic<-variables_Elastic[-1,]
 variables_Elastic<-variables_Elastic$variables[variables_Elastic$s0!=0]
 #Calculando las predicciones en los datos de prueba
 # Presentando las métricas de desempeño
-predict_Outcomes_Elastic <- ifelse(pred_y_Lasso < rocThreshold,0,1) 
+predict_Outcomes_Elastic <- ifelse(pred_y_elastic < 0.6,0,1) 
 table_mat <- table(predict_Outcomes_Elastic, dtBinPrueba$yL)
 accuracy_Test_Elastic <- sum(diag(table_mat)) / sum(table_mat)
-#par(mfcol=c(1,1))
-#par(pty="s") # Define que el tipo de gráfico es un cuadrado
-#rocPlot <- roc(dtBinPrueba$yL ~ predict_Outcomes_Elastic, data=dtBinPrueba, legacy.axes = TRUE,
-#        percent=TRUE, xlab="Procentaje de Falsos Positivos", ylab="Porcentaje de Verdaderos Positivos")
-#rocPlotinfo <-data.frame(tpp=rocPlot$sensitivities, fpp=(1- rocPlot$specificities),thresholds=rocPlot$thresholds)
-#plot(rocPlot, print.auc=TRUE, print.thres="best")
-#accuracy_Test_Elastic
+par(mfcol=c(1,1))
+par(pty="s") # Define que el tipo de gráfico es un cuadrado
+rocPlot <- roc(dtBinPrueba$yL ~ predict_Outcomes_Elastic, data=dtBinPrueba, legacy.axes = TRUE,
+        percent=TRUE, xlab="Procentaje de Falsos Positivos", ylab="Porcentaje de Verdaderos Positivos")
+rocPlotinfo <-data.frame(tpp=rocPlot$sensitivities, fpp=(1- rocPlot$specificities),thresholds=rocPlot$thresholds)
+plot(rocPlot, print.auc=TRUE, print.thres="best")
 ```
   
 ### 3.2 Enfoques Bayesianos
@@ -448,10 +490,10 @@ nombres_bma<-nombres_bma[bma_binary_bicreg$which[1,]]
 
 model_bma_bin <- glm(yL ~ x24+x17+x18 , family="binomial", data=dtBinEntrenamiento)
 
-predict_lm_bma <-model_bma_bin %>% predict(dtBinPrueba) 
+predict_lm_bma <-model_bma_bin %>% predict(dtBinPrueba,type="response") 
 mse_lm_bma<-mean((dtBinPrueba$yL - predict_lm_bma)^2)
 
-predict_Outcomes_BMA <- ifelse(predict_lm_bma < rocThreshold,0,1) 
+predict_Outcomes_BMA <- ifelse(predict_lm_bma < 0.6,0,1) 
 table_mat <- table(predict_Outcomes_BMA, dtBinPrueba$yL)
 accuracy_Test_BMA <- sum(diag(table_mat)) / sum(table_mat)
 
@@ -482,25 +524,48 @@ dfComparResultsFreq <- data.frame("Núm Variables"=c(length(listvarBIC),
                                     row.names=c("Stepwise con BIC", "Ridge", "Lasso", "Elastic Net", "BMA"))
 kable(dfComparResultsFreq )%>% kable_styling("striped") 
 ```
-```{r comparative_freq2,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
-lm_bma_seleccionado<- glm(yL ~ x24+as.factor(x17)+as.factor(x18) , family="binomial", data=dtDatNoCollinearity)
-summary(lm_bma_seleccionado)
+
+Los criterios para seleccionar el mejor modelo para competir debe tener la capacidad de maximizar la capacidad de asertividad $(Accuracy)$ y que sea parsimonioso; es decir, que tome el menor número de variables. Para la variable Binaria el mejor modelo es el BMA ya que es el que tiene un $Accuracy$ muy superior al de los otros modelos y presenta la mejor relación de número de variables vs $accuracy$.
 
 
-dtNuevos <-read.csv("C://Users/Julian Castelblanco/Desktop/Met/Competencia_Com/Binario/datasetx.csv", header = TRUE, sep="," , na.strings = c("", "NA"), encoding = "UTF-8", stringsAsFactors=FALSE)
+Guardar modelo seleccionado:
+```{r savemodelselect}
+# Guardar Base Modelo Seleccionado
+save(model_bma_bin, file = "ModelBinary.RData")
+```
+
+
+
+```{r entrega_profesor,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE, results = 'hide'}
+load("ModelBinary.RData")
+dtNuevos <-read.csv("datasetx.csv", header = TRUE, sep="," , na.strings = c("", "NA"), encoding = "UTF-8", stringsAsFactors=FALSE)
 dtNuevos <-dtNuevos[151:175,]
 
 VarContinuasNuevos<- subset(dtNuevos, select=c(x1,x2,x8,x10,x11,x12,x21,x22,x23,x24,x27,x31,x32))
+###x10
+max<-qlnorm(0.975,meanlog=3.850165,sdlog=1.492197) ## máximo en 0.975
+#min<-qlnorm(0.025,meanlog=res1$fittedParams[[1]],sdlog=res1$fittedParams[[2]]) ## mínimo en 0.025
+VarContinuasNuevos$x10<- ifelse(VarContinuasNuevos$x10>max,max,VarContinuasNuevos$x10)
+###x27
+max<-qgamma(0.975,shape = 2.91695510,rate= 0.03716774 ) ## máximo en 0.975
+VarContinuasNuevos$x27<- ifelse(VarContinuasNuevos$x27>max,max,VarContinuasNuevos$x27)
+###x31
+max<-qbeta(0.975,shape1 = 1.303047,shape2 = 3.340890 ) ## máximo en 0.975
+VarContinuasNuevos$x31<- ifelse(VarContinuasNuevos$x31>max,max,VarContinuasNuevos$x31)
+
+
+VarContinuasNuevos<-clusterSim::data.Normalization(VarContinuasNuevos,type = "n4",normalization="column")
+
 varBinariasNuevos <- subset(dtNuevos, select=c(x3,x4,x5,x6,x7,x13,x14,x15,x16,x17,x18,x19,x20,x28,x29))
 varBinariasNuevos <- apply(varBinariasNuevos,2,as.factor)
 varDiscretasNuevos <-subset(dtNuevos, select=c(x9,x25,x26,x30))
 #varDiscretas <- apply(varDiscretas,2,as.factor)
 
+
 dtDesconocidos <-cbind(VarContinuasNuevos,varBinariasNuevos,varDiscretasNuevos)
-dtNuevoEstandar <-predict(DatPreProc,dtDesconocidos)
-y_send <-lm_bma_seleccionado %>% predict(dtNuevoEstandar) 
-predict_Outcomes_Nuevos <- ifelse(y_send  < rocThreshold,0,1) 
-write.csv(predict_Outcomes_Nuevos,"y_binaria.csv", row.names = FALSE)
+dtNuevoEstandar <-predict(model_bma_bin,dtDesconocidos,type="response")
+predict_Outcomes_Nuevos <- ifelse(dtNuevoEstandar  < 0.6,0,1) 
+write.csv(data.frame(id=dtNuevos$id,y_predict=predict_Outcomes_Nuevos),"y_binaria.csv", row.names = FALSE)
 ```
 
 # Bibliografía

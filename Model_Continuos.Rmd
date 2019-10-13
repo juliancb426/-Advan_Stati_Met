@@ -1,7 +1,7 @@
 ---
 title: "Competencia de Métodos Avanzados de Estadística - Distribución Continua"
 date: "12/Oct/2019"
-author: "Andrés Franco, Julían Castelblanco y Edgar Alirio Rodríguez"
+author: "Andrés Franco, Julián Castelblanco y Edgar Alirio Rodríguez"
 output:
  html_document: default
  pdf_document: default
@@ -14,21 +14,20 @@ knitr::opts_chunk$set(
 	warning = FALSE,
 	cache = TRUE
 )
-library(caret)
-library(car)
-library(gvlma)
-library(MASS)
-library(RcmdrMisc)
-library(olsrr)
-library(BAS)
-library(BMA)
-library(ggplot2)
-library(corrplot)
-library(nortest)
-library(kableExtra)
-library(normtest)
-library(glmnet)
-library(dplyr)
+
+getPkg <-function(pkg, url = "http://cran.r-project.org"){
+  to.do <- setdiff(pkg, installed.packages()[,1])
+  for(package in to.do) invisible(install.packages(package, repos = url))
+}	
+pkgs <- c("glmnet","dplyr","ggplot2","lattice","outliers","caret","ROCR","nortest","nnet",
+          "MASS","lme4","SparseM","car","leaps","rriskDistributions","easypackages","pscl","MASS",
+          "gvlma","olsrr","RcmdrMisc","BAS","BMA","corrplot","kableExtra","normtest","clusterSim")
+
+getPkg(pkgs)
+library(easypackages)
+libraries(pkgs)
+options(scipen=999) 
+
 mse <- function(sm) mean(sm$residuals^2)
 
 accuracy_lm <- function(y, y_pred) {
@@ -37,7 +36,7 @@ accuracy_lm <- function(y, y_pred) {
  confusion_matrix<-caret::confusionMatrix(y_pred_bin, y_bin) #(pred, truth)
  as.numeric(confusion_matrix$overall["Accuracy"])
 }
-setwd("C:/Users/User/Desktop/MAESTRIA/SEMESTRE_II/EC1209 - MÉTODOS ESTADÍSTICOS AVANZADOS EN CIENCIAS DE LOS DATOS")
+
 ```
 # Introducción
 A partir de la base de datos suministrada, que tiene las siguientes variables: <br>
@@ -527,9 +526,15 @@ dfComparResultsFreq <- data.frame("Núm Variables"=c(length(listvarAIC),
                                     row.names=c("Stepwise con BIC", "Ridge", "Lasso", "Elastic Net", "BMA"))
 kable(dfComparResultsFreq )%>% kable_styling("striped") 
 ```
-Los criterios para seleccionar el mejor modelo para competir debe tener la capacidad de minimizar el $MSE$ para cuando se le ingrese mas información para predir la variable dependiente el error medio tienda a ser minimizado. Para la variable continua el mejor modelo es el BMA ya que es el que tiene el menor $MSE$ y tiene la tercera mejor relación de numero de variables vs $accuracy$.
+Los criterios para seleccionar el mejor modelo para competir debe tener la capacidad de minimizar el $MSE$ para cuando se le ingrese mas información para predir la variable dependiente el error medio tienda a ser minimizado y que sea parsimonioso; es decir, que tome el menor número de variables. Para la variable continua el mejor modelo es el BMA ya que es el que tiene el menor $MSE$ y tiene la tercera mejor relación de numero de variables vs $accuracy$.
 
 
+Guardar el modelo seleccionado
+```{r savemodelselect}
+# Guardar Base Modelo Seleccionado
+lm_bma<-lm(y~x10+x13+x20+x23+x25+x31,data=dtDatNoCollinearity)
+save(lm_bma, file = "ModelContinous.RData")
+```
 
 
 ## Referencias
@@ -540,13 +545,9 @@ Los criterios para seleccionar el mejor modelo para competir debe tener la capac
 <a name="5">[5]</a> Raftery, A. E., Madigan, D., & Hoeting, J. A. (1997). Bayesian model averaging for linear regression models. Journal of the American Statistical Association, 92(437), 179-191.<br>
 
 ```{r entrega_profesor,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE, results = 'hide'}
-lm_bma<-lm(y~x10+x13+x20+x23+x25+x31,data=dtDatNoCollinearity)
-summary(lm_bma)
-
 dfX <- read.table("datasetx.csv", header = TRUE, sep=",", encoding = "UTF-8", stringsAsFactors=FALSE);
-dfX$id<-NULL
-dfX %>% select(x10,x13,x20,x23,x25,x31)->dfX
-y_send <-lm_bma %>% predict(tail(dfX,25))
+dfX<-subset(dfX, select=c(id,x10,x13,x20,x23,x25,x31))
+y_send <-lm_bma %>% predict(tail(dfX[,-1],25))
 y_send$y<-y_send
-write.csv(y_send$y,"C:/Users/User/Desktop/MAESTRIA/SEMESTRE_II/EC1209 - MÉTODOS ESTADÍSTICOS AVANZADOS EN CIENCIAS DE LOS DATOS/y_continua.csv", row.names = FALSE)
+write.csv(data.frame(id=dfX$id,ypred=y_send$y),"y_continua.csv", row.names = FALSE)
 ```
