@@ -581,7 +581,7 @@ datos<- subset(data, select=c(id,x3,x25,x32))
 datos$x3 <- as.factor(datos$x3)
 datos$x27 <-clusterSim::data.Normalization(datos$x32,type = "n4",normalization="column")
 load("ModelCount.RData")
-prede<-predict(model_bma_pois,datos[,-1],type = "response")
+prede<-floor(predict(model_bma_pois,datos[,-1],type = "response"))
 df_pred<-data.frame(id=datos$id,y_prede=prede)
 
 write.csv(df_pred,"y_count.csv", row.names = FALSE)
