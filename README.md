@@ -1,2 +1,2 @@
-# -Advan_Stati_Met
+# Advan_Stati_Met
 Compet
