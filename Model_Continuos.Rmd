@@ -1,0 +1,552 @@
+---
+title: "Competencia de Métodos Avanzados de Estadística - Distribución Continua"
+date: "12/Oct/2019"
+author: "Andrés Franco, Julían Castelblanco y Edgar Alirio Rodríguez"
+output:
+ html_document: default
+ pdf_document: default
+---
+
+```{r setup, include=FALSE, cache=TRUE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	cache = TRUE
+)
+library(caret)
+library(car)
+library(gvlma)
+library(MASS)
+library(RcmdrMisc)
+library(olsrr)
+library(BAS)
+library(BMA)
+library(ggplot2)
+library(corrplot)
+library(nortest)
+library(kableExtra)
+library(normtest)
+library(glmnet)
+library(dplyr)
+mse <- function(sm) mean(sm$residuals^2)
+
+accuracy_lm <- function(y, y_pred) {
+ y_bin<-factor(as.numeric(y>-1))
+ y_pred_bin<-factor(as.numeric(y_pred>-1))
+ confusion_matrix<-caret::confusionMatrix(y_pred_bin, y_bin) #(pred, truth)
+ as.numeric(confusion_matrix$overall["Accuracy"])
+}
+setwd("C:/Users/User/Desktop/MAESTRIA/SEMESTRE_II/EC1209 - MÉTODOS ESTADÍSTICOS AVANZADOS EN CIENCIAS DE LOS DATOS")
+```
+# Introducción
+A partir de la base de datos suministrada, que tiene las siguientes variables: <br>
+<ul>
+<li>y: Variable binaria dependiente</li>
+<li>xl a X32: Variables independientes</li>
+</ul>
+<br>
+Se procederá a construir uno modelo de prediccción, que responda a los requierimientos propuestos en la competencia, que tiene tres criterios de evaluación:<br>
+<ul>
+<li>Capacidad predictiva específica: 15%</li>
+<li>Capacidad predictiva general  : 25%</li>
+<li>Selección de regresores    : 25%</li>
+</ul>
+
+La capacidad predictiva general será el error cuadratico medio(MSE) y para determinar la capacidad predictiva específica será la correcta clasificación de los valores inferiores y superiores a -1 para la variable continua.
+
+# 1. Carga de Datos y Análisis Descriptivo
+Se cargan todos los datos para la variable respuesta continua y se identifica el tipo de variable para cada regresor, así:
+<ul>
+<li> Variable dependiente $y$: Continua. </li>
+<li> Variables categoricas: $x3,x4,x5,x6,x7,x13,x14,x15,x16,x17,x18,x19,x20,$$x25,x26,x28,x29,x30$</li>
+<li> Variables continuas: $x1,x2,x8,x9,x10,x11,x12,x21,x22,x23,x24,x27,x31,x32$</li>
+</ul>
+```{r loading_data, cache=TRUE}
+df <- read.table("datacontinuousstudents.csv", header = TRUE, sep=",", encoding = "UTF-8", stringsAsFactors=FALSE);
+df$id <- NULL
+summary(df)
+```
+<br>
+### 1.1 Frequencias Variables Categóricas
+A continuación se presentan las tablas de frecuencias de las variables categóricas, en las que se puede apreciar que los datos están desbalanceados, por ejemplo las variables: x5, x6,x7,x14,x15,x16, x18, x19, x20, x28 y x29 tiene pocas observaciones con valor de 1, porque la mayoría de las observaciones tiene valor de 0.
+<br>
+```{r ploting_categoricals, echo=FALSE, fig.height=1.5, fig.width=1.5, message=FALSE, warning=FALSE, cache=TRUE}
+par(mfrow=c(3,6))
+ggplot(df, aes(x=factor(x3))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x4))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x5))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x6))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x7))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x13))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x14))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x15))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x16))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x17))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x18))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x19))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x20))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x25))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x26))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x28))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x29))) + geom_bar(stat="count", fill="steelblue")
+ggplot(df, aes(x=factor(x30))) + geom_bar(stat="count", fill="steelblue")
+```
+<br>
+### 1.2 Distibucion variables continuas
+Analizando los histogramas de frecuencias de las variables continuas se identifican casos de variables que las observaciones están concentradas en un rango reducido como por ejemplo las variables: x10, x12, x22, x23 o x24. Sólo las variables "y" y x8 tiene una distribución de frecuencia que se asemeja a una distribución normal.
+<br>
+```{r ploting_cONTINUAS, echo=FALSE, message=FALSE, warning=FALSE, cache=TRUE}
+par(mfrow=c(3,3))
+hist(df$y)
+hist(df$x1)
+hist(df$x2)
+hist(df$x8)
+hist(df$x9)
+hist(df$x10)
+hist(df$x11)
+hist(df$x12)
+hist(df$x21)
+hist(df$x22)
+hist(df$x23)
+hist(df$x24)
+hist(df$x27)
+hist(df$x31)
+hist(df$x32)
+```
+# 2. Validación de Supuestos de una Regresión Lineal
+Antes de poder iniciar con la selección de variables y la identificación de los posibles modelos de regresión lineal, se debe verificar el cumplimiento de los siguiente supuestos:
+<ul>
+<li> Linealidad de los datos: </li>
+<li> Normalidad: Los valores residuales de la regresión tiene una distribución normal.</li>
+<li> Homoscedasticidad: la varianza de las variables predictoras es constante a lo largo de las observaciones.</li>
+<li> Identificación de datos influyentes</li>
+<li> Multicollinearity: No debe existir multicolinealidad entre los datos. </li>
+</ul>
+
+### 2.1 Linealidad de los Datos
+```{r cheking_lineality, echo=TRUE, message=FALSE, warning=FALSE, cache=TRUE}
+model_lm_all <- lm(y~.,data=df)
+plot(model_lm_all, which=1, id.n=5)
+```
+<br>
+Del gráfico de los Valores Residuales vs Valores Pronósticados (*fittes values*), no se identifica algún patrón de la distribución de las observaciones. De otra parte, la línea roja No es completamente horizontal sobre el valor de cero, entre el rango de los valores de -2 y -1 del eje de valores pronósticados, la línea roja está ligeramente por encima con una pendiente negativa, y entre el rango de los valores de 2 y 4 del eje de valores pronósticados, la línea roja está ligeramente por debajo del cero y con una pendiente negativa. Luego se concluye que cumple con el supuesto de Linealidad de los datos.
+<br>
+
+### 2.2 Normalidad de los datos
+```{r cheking_normality_1,cache=TRUE, warning=FALSE, echo=TRUE, message=FALSE}
+restud_Model_all<-round(rstudent(model_lm_all),4) 
+testShapWilk<-shapiro.test(restud_Model_all) 
+plot(model_lm_all, which=2, id.n=8)
+```
+<br>
+De la gráfica Normal Q-Q, se identifica que las observaciones que están dentro del rango de -1 y 1 del eje de Quantiles (*Theorical Quantiles*), los puntos están sobre la línea puntueada, además que hay una alta concentración de los puntos, pero en los rangos de -2 a -1 y de 1 a 2 del eje de Quantiles, los datos están más dispersos y ligeramente por debajo de la línea de puntueada. Las observaciones que están superan los limites de -2 y 2 del eje de Quantiles está más dispersos y están más alejados de la línea puntueada, los que potenialmente podría indicidir en el cálculo de los coeficientes de la regresión, entre estas observaciones están: 96,14,5, 148,140, 92, 99 y 135. 
+Sin embargo, realizando el test de Shapiro-Wilk se obtiene un p-value de `r toString(round(testShapWilk$p.value,digits=3))`, por lo que al estar en la región de rechazo no es posible rechazar la hipótesis nula de que los datos provienen de una población que tienen una distribución normal.
+<br>
+
+### 2.3 Homoscedasticidad
+```{r cheking_normality_2,cache=TRUE, warning=FALSE, echo=TRUE, message=FALSE}
+
+# Falta incluir el test de Homoscedasticidad
+anova(model_lm_all)
+plot(model_lm_all, which=3, id.n=8)
+```
+<br>
+A primera vista se puede apreciar la línea roja que es casi horizontal con una ligera pendiente negativa. De otra parte, se identifica que los residuales se distribuyen equitativamente a lo largo de los rangos de los valores pronósticados (*fittes values*).
+$Falta colocar el resultado de la prueba de Homoscedasticidad$
+<br>
+
+
+### 2.4. Identificación de Datos Influyentes
+Previo a la identificación de los valores influyentes, se va identificar los valores atípicos (*outliers*)
+
+#### Identifación de valores atípicos
+Analizando la distribución de todos los datos con los valores mínimos, máximos y la media. Se identifica algunas anomalias entre los valores extremos y el percentil 75, por lo tanto se procede a visualizar un boxplot para identidicar la distribucion de estas variables. Por el momento no se realiazaría ninguna acción sobre estas variables.<br>
+ 
+```{r ploting_outliers,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+par(mfrow=c(2,3))
+boxplot(df$x2, data=df, notch=TRUE,col=(c("gold","darkgreen")) , 
+    main="X2")
+boxplot(df$x10, data=df, notch=TRUE,col=(c("gold","darkgreen")) , 
+    main="X10")
+boxplot(df$x12, data=df, notch=TRUE,col=(c("gold","darkgreen")) , 
+    main="X12")
+boxplot(df$x23, data=df, notch=TRUE,col=(c("gold","darkgreen")) , 
+    main="X23")
+boxplot(df$x27, data=df, notch=TRUE,col=(c("gold","darkgreen")) , 
+    main="X27")
+boxplot(df$x31, data=df, notch=TRUE,col=(c("gold","darkgreen")) , 
+    main="X31")
+```
+
+```{r detecting_outliers}
+outlierX10<-outliers::outlier(df$x10)
+outlierX27<-outliers::outlier(df$x27)
+df[df$x10==outlierX10 | df$x27==outlierX27,c("x10","x27")]
+```
+Coincidencialmente se identifica que los outliers de las variables x10 y x27 corresponden a la observación 138. Sin embargo, antes de tomar una decisión sobre eliminar o no está observación se procederá a validar si es una observación influyente.
+
+<br>Se considera conveniente identificar si existen valores extremos que tengan una influencia significativa en el cálculo de los valores de la regresión [2](#2), para lo que se utilizará la métrica denominada Distancia de *Cook*, que se calcula removiendo del modelo el i-ésimo dato y calculando la regresión, sumando el cambio de todos los valores del modelo de regresión dado que se se removió el el i-ésimo dato. La formula de la distancia de Cook es: $D_i=\frac{\sum_{j=1}^n(\hat{Y}_j - \hat{Y}_{j(i)})^2}{(p+1)\hat{σ}^2}$ 
+
+Teniendo como referencia del punto de corte la formula $\frac{4}{n-p-1}$, siendo *n* el número de observaciones, *p* el número de variables predictoras.
+<br>
+
+```{r checking_cook_distance, echo=FALSE, message=FALSE, warning=FALSE, cache=TRUE, out.height="100%", out.width="85%"}
+# Verificando valores extremos según la distancia de Cook
+dfcookDistance <- as.data.frame(cooks.distance(model_lm_all))
+names(dfcookDistance)<-"cooksd"
+numObser_All <-nrow(df)
+numPredictoras <- ncol(df)-1
+#par(mfrow=c(2,1))
+plot(model_lm_all, which = 4, id.n = 5)
+#plot(cooks.distance(modelLogistic), pch=23,bg='orange',cex=2, ylab="Cook's Distance")
+abline(h=4/(numObser_All-numPredictoras-1), col="red")
+plot(model_lm_all, which = 5, id.n = 5)
+#outlierTest(modelLogistic)
+#influencePlot(modelLogistic)
+```
+<br>
+Al analizar la gráfica de la distancia de Cook vs Observaciones, claramente se identifica que el registro 79 tiene una distancia de *Cook* de `r toString(round(dfcookDistance[79,], digits=2))` que considerablemente supera el valor de la línea roja o punto de corte que es de`r toString(round(4/(numObser_All-numPredictoras-1), digits=2))`. Lo que se ratifica con la gráfica de los Residuales vs Influencia (*Leverage*), en la que se identifica que la observación 79 está superando (a la derecha) la línea roja discontinua que delimita la distancia de *Cook*,lo que indica que corresponde a un valor extremo que tiene una inflencia significativa en el resultado del cálculo de la regresión,
+
+De acuerdo con esto la recomendación es eliminar del conjunto de datos la observación 79 y a varificar como queda la distribución de la distancia de Cook de las restantes observaciones.
+<br>
+```{r checking_cook_distance_2, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE, out.height="100%", out.width = "85%"}
+# Verificando valores extremos según la distancia de Cook
+dfNotInfluencers <- df[-c(79),]
+model_lm_NotInfluencers <- lm(y~.,data=dfNotInfluencers)
+dfcookDistance_after <- as.data.frame(cooks.distance(model_lm_NotInfluencers))
+par(mfcol=c(1,2))
+#par(mfcol=c(3,1))
+numObserv_NotInfluencers <-nrow(dfNotInfluencers)
+plot(model_lm_NotInfluencers, which = 4, id.n = 7)
+abline(h=4/(numObserv_NotInfluencers-numPredictoras-1), col="red")
+plot(model_lm_NotInfluencers, which = 5, id.n = 7)
+```
+<br>
+Habiendo retirado la observación 79, en la imagen de la distancia de Cook vs Observacionesse aprecian las observaciones 5, 14, 27, 92, 94, 99, y 138, están por encima del limite del punto corte. Sin embargo, en la gráfica de los Residuales vs Influencia, estos puntos se identifica que están a la izquierda de la linea roja puntuada que corresponde al limite de la Diastancia de Cook, por lo que no se considera que sean una observación influyente, por lo que no es necesario retiralo del conjunto de observaciones.
+<br>
+
+
+### 2.5 Detectando Multicolinealidad
+A continuación se procederá a verificar si existe colinealidad entre dos o más variables predictoras, para lo que se calculará el Factor de Inflación de Varianza (VIF)[2](#2), que identifica cómo la varianza de los coeficientes de la regresión son inflados debido a multicolinealidad del modelo. $VIF=\frac{1}{Tol}=\frac{1}{1-R^2}$
+
+El menor valor de VIF es uno (1) que indica ausencia de multicolinealidad. La recomendación es que los valores de VIF que sean mayores de 5 o 10 es un indicio de multicolinealidad, algunas fuentes mencionan que para modelos débiles, a partir de un VIF de 2.5 puede ser un indicio de multicolinealidad y otras afirman que un valor de VIF inferior a 4 se consdiera bueno para el modelo, por lo que se establecerá como valor de referencia de multicolinealidad un valor de 5.
+```{r checking_multicollinearity, echo=FALSE, message=FALSE, warning=FALSE, cache=TRUE}
+# Verificando la multicolinealidad
+dfresults_VIF<-as.data.frame(vif(lm(y~.,data=dfNotInfluencers)))
+colnames(dfresults_VIF)<-c("VIF")
+dfresults_VIF$collinearity<-"False"
+dfresults_VIF[dfresults_VIF$VIF>5, 2]<-"True"
+# Seleccionar las variables que tienen VIF mayor a 5, puesto que es un indicio de Multicolinealidad
+df_VIF_Multicollinearity <- dfresults_VIF[dfresults_VIF$collinearity=="True",]
+varNameCollinearity<- dput(as.character(row.names(df_VIF_Multicollinearity)))
+kable(df_VIF_Multicollinearity,digits = 2, format = "html", row.names = TRUE) %>%
+kable_styling(bootstrap_options = c("striped", "hover"),full_width = F, font_size = 12,position = "left")
+```
+Después de realizar el cálculo del VIF se identifica que las siguientes variables `r toString(varNameCollinearity)` tienen un valor de VIF superior a 5, por lo que se procederá a calcular cuál es la correlación entre estas variables, dejando solamente las que tengan un valor superior a 0.5.
+
+```{r checking_multicollinearity_2, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+dfvarNameCollinearity<-as.data.frame(abs(cor(dfNotInfluencers[,varNameCollinearity])))
+dfvarNameCollinearity<-as.data.frame(apply(dfvarNameCollinearity,2,function(x) ifelse((x<0.3 |x==1),"",round(x,3))))
+kable(dfvarNameCollinearity, digits = 2, format = "html", row.names = TRUE) %>%
+kable_styling(bootstrap_options = c("striped", "hover"),full_width = F, font_size = 12, position = "left")
+```
+<br>
+Al verificar los datos de la correlación entre las variables que presentaron multicolinealidad, se identifica que por ejemplo la variable x1 tieneuna alta correlación con x2, x11, x17 y x21, por lo que se suguiere eliminar estas cuatro últimas y dejar x1. 
+
+Luego se dejan las variables x1, x23 y x32, y se procede a excluir x2, x11, x17, x21 y x31. Luego nuevamente se procede a calcular el VIF para comprobar que no exista multicolinealidad.
+<br>
+```{r checking_multicollinearity_3, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+varsToExclude <-c("x2","x11","x17","x21","x32")
+dtDatNoCollinearity<- dfNotInfluencers[, -which(names(dfNotInfluencers)%in% varsToExclude)]
+numObser_NoCollinearity <-nrow(dtDatNoCollinearity)
+model_lm_NotMulticollinearity <- lm(y~.,data=dtDatNoCollinearity)
+dfresults_VIF_2<-as.data.frame(vif(model_lm_NotMulticollinearity))
+colnames(dfresults_VIF_2)<-c("VIF")
+dfresults_VIF_2$collinearity<-"False"
+dfresults_VIF_2[dfresults_VIF_2$VIF>5, 2]<-"True"
+kable(dfresults_VIF_2, digits = 2, format = "html", row.names = TRUE) %>%
+kable_styling(bootstrap_options = c("striped", "hover"),full_width = F, font_size = 12, position = "left")
+```
+Luego se detecta que entre las variables que se dejaron en el conjunto de datos, ya NO existen multicolinealidad.
+
+### 2.6 Resumen de Resultados de Intervenciones
+Antes de avanzar en la evaluación de modelos, se considera conveniente realizar una evaluación comparativa de los modelos de regresión lineal simple que se han establecido hasta el momento con las exclusiones de datos influyentes y variables que presentan multicolinealidad, lo que nos puede servir como base o referencia.
+
+```{r comparative_base,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+dfComparativeResults <- data.frame("R²"=c( round(summary(model_lm_all)$r.squared,digits=4), 
+                      round(summary(model_lm_NotInfluencers)$r.squared,digits=4), 
+                      round(summary(model_lm_NotMulticollinearity)$r.squared,digits=4)),
+                  "R² Ajustado"=c( round(summary(model_lm_all)$adj.r.squared,digits=4), 
+                      round(summary(model_lm_NotInfluencers)$adj.r.squared,digits=4), 
+                      round(summary(model_lm_NotMulticollinearity)$adj.r.squared,digits=4)),
+                  "MSE"=c( round(mse(model_lm_all),digits=4), 
+                      round(mse(model_lm_NotInfluencers),digits=4), 
+                      round(mse(model_lm_NotMulticollinearity),digits=4)),
+                  "BIC"=c( round(extractAIC(model_lm_all, k=log(numObser_All))[2],digits=2), 
+                      round(extractAIC(model_lm_NotInfluencers,k=log(numObserv_NotInfluencers))[2],digits=2), 
+                      round(extractAIC(model_lm_NotMulticollinearity,k=log(numObser_NoCollinearity))[2],digits=2)),
+                  "Accuracy"=c( round(accuracy_lm(df$y ,model_lm_all$fitted.values),digits=3), 
+                      round(accuracy_lm(dfNotInfluencers$y, model_lm_NotInfluencers$fitted.values),digits=3), 
+                      round(accuracy_lm(dtDatNoCollinearity$y, model_lm_NotMulticollinearity$fitted.values),digits=3)),
+                  row.names=c("Todas las variables", "Sin Datos Influenciadores", "Sin Multicolinealidad ni dato influyente"))
+kable(dfComparativeResults)%>% kable_styling("striped") 
+```
+De acuerdo con los valores establecidos para las métricas descritas en la anterior tabla, se identifica que el conjunto de observaciones en la que se excluyeron la observación 79 (por ser una observación influyente) y las variables ("x2","x11","x17","x21","x32) que presentaban multicolinealidad tiene el mayor valor de R² ajustado `r toString(round(summary(model_lm_NotMulticollinearity)$adj.r.squared,digits=4))`, lo que indicaría que el modelo de regresión con este conjunto de datos, permite explicar una mayor proporcio de la variabilidad de la variable resultado $y$. Pero a la vez este conjunto de datos tiene el menor valor de BIC (*Bayesian Information Criteria*), lo que es buen indicio entre la complejidad (relacionado con la cantidad de variables) del modelo y el poder de predicción del modelo.
+
+De otra parte, revisando la rúbrica de evaluación del modelo, en la que establece que "*La capacidad predictiva general será el error cuadratico medio(MSE) y para determinar la capacidad predictiva específica será la correcta clasificación de los valores inferiores y superiores a -1 para la variable continua.*" Se identifica que el conjunto de datos que no tiene el dato influyente ni las variables que presentaban multicolinealidad tiene un alto MSE `r toString(round(mse(model_lm_NotMulticollinearity),digits=4))`, lo cual no correspondería el ideal de la capacidad predictiva, pero si tiene una mejor capacidad predictiva específica `r toString(round(accuracy_lm(dtDatNoCollinearity$y, model_lm_NotMulticollinearity$fitted.values),digits=3))`. 
+
+Por lo anterior, se continuará evaluando modelos utilizando este conjunto de datos que no tiene el dato influyente ni las variables que presentaban multicolinealidad.
+
+# 3. Identificación de Modelos que Mejoren la Predicción
+Previo a la identificación de modelos, se procederá a aplicar la validación cruzada en el que se dividen las observaciones del conjunto que no tiene el dato influyente ni las variables que presentaban multicolinealidad, en dos subconjuntos, uno para entrenamiento de los modelos con el 70% de las observaciones,  otro subconjunto para evaluar  o probar el desempeño de cada modelo con el 30% de las observaciones.
+```{r particion_validacion_cruzada, echo=FALSE, message=FALSE, warning=FALSE, cache=TRUE}
+set.seed(123)
+inTraining <- createDataPartition(dtDatNoCollinearity$y, p = .7, list = FALSE)
+dtConEntrenamiento <- dtDatNoCollinearity[ inTraining,]
+dtConPrueba <- dtDatNoCollinearity[-inTraining,]
+```
+Luego de esta división de las observaciones se tiene que el subconjunto de entrenamiento tiene `r toString(nrow(dtConEntrenamiento))` observaciones y el subconjunto con los datos de prueba tiene `r toString(nrow(dtConPrueba))` observaciones.
+
+### 3.1 Métodos Frecuentistas
+
+#### 3.1.1 Regresion lineal utilizando el Método Stepwise
+Se parte como modelo inicial el modelo base con todas las variables para ir corriendo diferentes modelos para determinar cual es el mejor, esta tecnica va comparando el modelo base quitando o agregando las variables sobre el espacio de los parámetros. La métrica utilizada para seleccionar el mejor modelo en este ejercicio fue $BIC=\ln{n} - 2\ln{\hat{L}}$, donde: $\hat{L}= p(x|\hat{\theta},M)$ es el valor maximizado de la probabilidad del modelo y $\hat{\theta}$ los parámetros que maximizan la función de verosimilitud [1](#1).
+```{r stepBIC,cache=TRUE, warning=FALSE, echo=TRUE, message=FALSE, results = 'hide'}
+model_lm_entrenamiento <- lm(y~.,data=dtConEntrenamiento)
+numObser_entrenamiento <- nrow(dtConEntrenamiento)
+modelBIC<- stepAIC(model_lm_entrenamiento, direction="both",k=log(numObser_entrenamiento))
+listcoeff<- summary(modelBIC)$coefficients[,1]
+summary(modelBIC)
+listvarAIC<- names(summary(modelBIC)$coefficients[,1])[-1]
+predictAICPrueba <-predict(modelBIC, dtConPrueba)
+accuracyAIC<-round(accuracy_lm(dtConPrueba$y, predictAICPrueba),digits = 2)
+```
+Como resultado de correr el método de Stepwise se identifica las variables seleccionadas en el que sería el mejor modelo son:  `r toString(listvarAIC[-1])` y que la precisión es de `r toString(accuracyAIC)`
+
+#### 3.1.2 Regresion lineal utilizando el Método Ridge
+La Regresión Ridge es una metodologia de regularizacion, que busca resolver problemas mal planteados. En este ejercicio sera utilizada para seleccionar variables en regresiones lineales con un gran numero de parametros.
+\begin{equation}
+   \widehat\beta_{Ridge} = (X'X+\lambda I)^{-1}(X'y)
+\end{equation}
+donde $\lambda$ es el parametro de penalización, esta funcion no solo minimiza la funcion de los residuos al cuadrado, si no tambien la estimacion de los parametros reduciendolos a 0.[2](#2)
+```{r Ridge_regression, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+set.seed(123)
+train_x <-model.matrix(y~., dtConEntrenamiento)[,-1]
+train_y<-dtConEntrenamiento$y
+#Estandarizar datos
+estandarizada <-preProcess(train_x, method = c("center", "scale"))
+train_x_estandarizada<-predict(estandarizada, train_x)
+
+# Realizando la Regresión Rigde
+#Encontrando el mejor lambda utilizando cross-validation
+lambdas_to_try <- 10^seq(-3, 5, length.out = 100)
+cv_lambda_Ridge <-cv.glmnet(train_x_estandarizada,train_y,alpha= 0, standardize = TRUE, lambda = lambdas_to_try)
+
+#Presentar el mejor valor de Lambda
+mejor_lambda_Ridge<-cv_lambda_Ridge$lambda.min
+
+#Entrenando el modelo utilizando Ridge regression con el mejor Lambda
+model_Ridge <- glmnet(train_x_estandarizada, train_y, alpha= 0, standardize = TRUE, lambda=mejor_lambda_Ridge, maxit=10^7)
+
+#summary(model_Ridge$offset)
+coef(model_Ridge)
+listvarRidge<-names(coef(model_Ridge)[,1])[-1]
+
+#Calculando las predicciones en los datos de prueba
+test_x_Ridge<- model.matrix(y~.,  dtConPrueba)[,-1]
+test_x_Ridge_estandarizada<-predict(estandarizada, test_x_Ridge)
+test_y<-dtConPrueba$y
+
+predictRidgePrueba <-model_Ridge %>% predict(test_x_Ridge_estandarizada) %>% as.vector()
+#Calculando las predicciones en los datos de prueba
+# Presentando las métricas de desempeño
+mse_model_Ridge<-mean((test_y - predictRidgePrueba)^2)
+accuracyRidge<-round(accuracy_lm(test_y, predictRidgePrueba),digits = 2)
+```
+El resultado de correr el método de Ridge Regression, da como reultado un $\lambda=$ `r toString(round(mejor_lambda_Ridge,3))` se identifica las variables seleccionadas en el que sería el mejor modelo son:  `r toString(listvarRidge)` y que la precisión es de `r toString(accuracyRidge)`
+
+#### 3.1.3 Regresion lineal utilizando el Método Lasso
+La Regresión Lasso es una metodologia, para seleccion de variables y resolver problemas de regularizacion. En este ejercicio sera utilizada para minimizar la cantidad de parametros de una regresión, que permitan explicar mejor el modelo.
+\begin{equation}
+     \beta^* = \min\limits_{\beta \in \mathbb{R}^p} \sum_{i=1}^n \left[y_i- x_i^{'}\beta_i \right]^2 + \lambda  \sum_{j=1}^p \mid \beta_j \mid
+\end{equation}
+donde $\lambda$ es el parametro de penalización, esta funcion no solo minimiza la funcion de los residuos al cuadrado, si no tambien la estimación de los parametros reduciendolos a 0. La diferencia entre Lasso y Ridge es la funcion de penalización de los parametros.[4](#4)
+```{r lasso_regression, cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+set.seed(123)
+train_x <-model.matrix(y~., dtConEntrenamiento)[,-1]
+train_y<-dtConEntrenamiento$y
+
+estandarizada <-preProcess(train_x, method = c("center", "scale"))
+train_x_estandarizada<-predict(estandarizada, train_x)
+
+# Realizando la Regresión Lasso
+#Encontrando el mejor lambda utilizando cross-validation
+cv_lambda_Lasso <-cv.glmnet(train_x_estandarizada,train_y,alpha= 1, standardize = TRUE)
+#Presentar el mejor valor de Lambda
+mejor_lambda_lasso<-cv_lambda_Lasso$lambda.min
+#Entrenando el modelo utilizando Lasso regression con el mejor Lambda
+model_lasso <- glmnet(train_x_estandarizada, train_y, alpha= 1, lambda=mejor_lambda_lasso, standardize = TRUE)
+listvarLasso<-names(coef(model_lasso)[,1])[-1]
+coef(model_lasso)
+
+variables_lasso<-as.data.frame(as.matrix(coef(model_lasso)))
+variables_lasso$variables<-row.names(variables_lasso)
+variables_lasso<-variables_lasso[-1,]
+variables_lasso<-variables_lasso$variables[variables_lasso$s0!=0]
+#variables_lasso<-paste(variables_lasso, collapse = ', ')
+
+#Calculando las predicciones en los datos de prueba
+test_x_Lasso<- model.matrix(y~.,  dtConPrueba)[,-1]
+test_x_Lasso_estandarizada<-predict(estandarizada, test_x_Lasso)
+test_y<-dtConPrueba$y
+
+predictLassoPrueba <-model_lasso %>% predict(test_x_Lasso_estandarizada) %>% as.vector()
+#Calculando las predicciones en los datos de prueba
+# Presentando las métricas de desempeño
+mse_model_Lasso<-mean((test_y - predictLassoPrueba)^2)
+accuracyLasso<-round(accuracy_lm(test_y, predictLassoPrueba),digits = 2)
+```
+El resultado de correr el método de Lasso Regression, da como reultado un $\lambda=$ `r toString(round(mejor_lambda_lasso,3))` se identifica las variables seleccionadas en el que sería el mejor modelo son:  `r toString(paste(variables_lasso, collapse = ', '))` y que la precisión es de `r toString(accuracyLasso)`
+
+#### 3.1.4 Regresion lineal utilizando el Método Elastic Net
+La metodo de Regresion Elastic Net  la cual retiene las ventajas de las metodologias Lasso y Ridge, para la seleccion de variables y resolver problemas de regularización y resolver las limitaciones de seleccionar grupos de variables correlacionadas o datos con alta multicolinealidad.
+\begin{equation}
+     \hat \beta^{Elastic} = arg\min\limits_{\beta}(\Vert {y-X\beta} \Vert^2 +\lambda_2 \Vert \beta \Vert^2 + \lambda_1 \Vert \beta \Vert_1 )
+\end{equation}
+donde $\lambda_1, \lambda_2$, son los coeficientes de penalización de la función para los metodos Lasso y Ridge regression.[4](#4)
+```{r elastic_net_regression,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+set.seed(123)
+train_x <-model.matrix(y~., dtConEntrenamiento)[,-1]
+train_y<-dtConEntrenamiento$y
+
+estandarizada <-preProcess(train_x, method = c("center", "scale"))
+train_x_estandarizada<-predict(estandarizada, train_x)
+
+
+optimal__param_elastic<- train(train_x_estandarizada, train_y, method="glmnet",
+                      trControl=trainControl("cv",number = 10),
+                      tuneLength=10)
+#Presentar el mejor valor de Alpha
+optimal_alpha <- optimal__param_elastic$bestTune$alpha
+#Presentar el mejor valor de Lambda
+optimal_lambda<-optimal__param_elastic$bestTune$lambda
+#Entrenando el modelo utilizando Elastic Net regression con el mejor Lambda y el mejor Alpha
+set.seed(123)
+test_x <- model.matrix(y~.,  dtConPrueba)[,-1]
+model_elastic <- glmnet(train_x_estandarizada, train_y, alpha= optimal_alpha, lambda=optimal_lambda)
+
+listvarElastic<-names(coef(model_elastic)[,1])[-1]
+coef(model_elastic)
+
+variables_elastic<-as.data.frame(as.matrix(coef(model_elastic)))
+variables_elastic$variables<-row.names(variables_elastic)
+variables_elastic<-variables_elastic[-1,]
+variables_elastic<-variables_elastic$variables[variables_elastic$s0!=0]
+
+
+test_x_Elastic<- model.matrix(y~.,  dtConPrueba)[,-1]
+test_x_Elastic_estandarizada<-predict(estandarizada, test_x_Elastic)
+test_y<-dtConPrueba$y
+
+predictElasticPrueba <-model_elastic %>% predict(test_x_Elastic_estandarizada) 
+listvarElastic<-names(coef(model_elastic)[,1])[-1]
+#Calculando las predicciones en los datos de prueba
+# Presentando las métricas de desempeño
+mse_model_Elastic<-mean((test_y - predictElasticPrueba)^2)
+accuracyElastic<-round(accuracy_lm(test_y, predictElasticPrueba),digits = 2)
+```
+El resultado de correr el método de Elastic Regression, da como reultado un $\lambda=$ `r toString(round(optimal_lambda,3))` y $\alpha=$ `r toString(round(optimal_alpha,3))` se identifica las variables seleccionadas en el que sería el mejor modelo son:  `r toString(paste(variables_elastic, collapse = ', '))` y que la precisión es de `r toString(accuracyElastic)`
+
+### 3.2 Enfoques Bayesianos
+
+#### 3.2.1 Promedio del Modelo Bayesiano
+Utilizando Bayesian Model Averaging (BMA) es una metodología bayesiana que utiliza una búsqueda estocástica que compara diferentes modelos por su probabilidad aposteriori[5](#5), donde propusieron un enfoque de Markov Chain Monte Carlo que se aproxima directamente a la solución exacta, lo que lleva aproxima la respuesta sin tener que calcular $2^p$ modelos diferentes, ya que los procedimientos comunes generalmente requieren mucho tiempo de cómputo para hacer una búsqueda exhaustiva.
+
+Sea $M= \{M_1,M_2, \dotsc,M_{2^k}\}$ el conjunto de todos los modelos posibles, donde cada uno de ellos depende de un conjunto de parámetros $\alpha_j$ $\forall j \in 1,\dotsc,2^k$, $k$ es el número de regresores posibles y $y$ es la variable dependiente, la probabilidad de modelo posterior se define como:
+\begin{equation}
+   P(M_j \mid y, M)=\frac{P(y \mid M_j)\pi(M_j)}{\sum_{i=1}^{m}P(y \mid M_i)\pi(M_i)} \hspace{5mm} \forall j=1,2,\dotsc,m
+ \end{equation}
+ 
+donde, 
+\begin{equation}
+   P(y \mid M_j)=\int ...\int P(y\mid \alpha_j, \hspace{2mm} M_j)\pi(\alpha_j \mid M_j ) d \alpha_j \hspace{5mm} \forall j=1,2,\dotsc,m
+ \end{equation}
+ 
+La probabilidad integrada del modelo $M_j$, $\alpha_j$ es el vector de parámetros del modelo $M_j$, $\pi(\alpha_j \mid M_j )$ es la prior de los parámetros bajo $M_j$, $P(y\mid\alpha_j,M_j)$ es la probabilidad y $\pi(M_j)$ es la probabilidad previa del $M_j$ sea el mejor modelo.
+
+<br>
+```{r modelo_bma,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+bma_lm_bicreg<-bicreg(dtDatNoCollinearity[,-1], dtDatNoCollinearity[,1],maxCol = 33, nbest = 500, strict =TRUE)
+summary(bma_lm_bicreg)
+nombres_bma<-names(bma_lm_bicreg$which[1,])
+nombres_bma<-nombres_bma[bma_lm_bicreg$which[1,]]
+
+```
+
+##### Comportamiento de las variables con BMA
+```{r modelo_bma_image,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+imageplot.bma(bma_lm_bicreg)
+```
+
+```{r modelo_bma_lm,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+lm_bma<-lm(y~x10+x13+x20+x23+x25+x31,data=dtConEntrenamiento)
+summary(lm_bma)
+
+predict_lm_bma <-lm_bma %>% predict(dtConPrueba) 
+mse_lm_bma<-mean((test_y - predict_lm_bma)^2)
+accuracy_lm_bma<-round(accuracy_lm(test_y, predict_lm_bma),digits = 2)
+```
+
+El resultado de utilizar BMA para la selección de variables, da como reultado del modelo  se identifica las variables seleccionadas en el que sería el mejor modelo son:  `r toString(paste(nombres_bma, collapse = ', '))` y la precisión es de `r toString(accuracy_lm_bma)`
+
+
+# 4. Resumen de Resultados
+A continuación se presenta el resumen de los resultados obtenidos con los diferentes métodos.
+```{r comparative_freq,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE}
+dfComparResultsFreq <- data.frame("Núm Variables"=c(length(listvarAIC), 
+                                                    length(listvarRidge), 
+                                                    length(variables_lasso),
+                                                    length(variables_elastic),
+                                                    length(nombres_bma)),
+                                    "MSE"=c(round(mse(modelBIC),digits=4), 
+                                          round(mse_model_Ridge,digits=4), 
+                                          round(mse_model_Lasso,digits=4),
+                                          round(mse_model_Elastic,digits=4),
+                                          round(mse_lm_bma,digits=4)),
+                                    "Accuracy"=c( round(accuracyAIC,digits=3), 
+                                                  round(accuracyRidge,digits=3),
+                                                  round(accuracyLasso,digits=3),
+                                                  round(accuracyElastic,digits=3),
+                                                  round(accuracy_lm_bma,digits=3)),
+                                    "Efect por Variable"=c( round(accuracyAIC/length(listvarAIC),digits=3), 
+                                                  round(accuracyRidge/length(listvarRidge),digits=3),
+                                                  round(accuracyLasso/length(variables_lasso),digits=3),
+                                                  round(accuracyElastic/length(variables_elastic),digits=3),
+                                                  round(accuracy_lm_bma/length(nombres_bma),digits=3)), 
+                                    row.names=c("Stepwise con BIC", "Ridge", "Lasso", "Elastic Net", "BMA"))
+kable(dfComparResultsFreq )%>% kable_styling("striped") 
+```
+Los criterios para seleccionar el mejor modelo para competir debe tener la capacidad de minimizar el $MSE$ para cuando se le ingrese mas información para predir la variable dependiente el error medio tienda a ser minimizado. Para la variable continua el mejor modelo es el BMA ya que es el que tiene el menor $MSE$ y tiene la tercera mejor relación de numero de variables vs $accuracy$.
+
+
+
+
+## Referencias
+<a name="1">[1]</a>Burnham, K. P., & Anderson, D. R. (2004). Multimodel inference: understanding AIC and BIC in model selection. Sociological methods & research, 33(2), 261-304.<br>
+<a name="2">[2]</a>Friedman, J., Hastie, T., & Tibshirani, R. (2010). Regularization paths for generalized linear models via coordinate descent. Journal of statistical software, 33(1), 1.<br>
+<a name="3">[3]</a>Tibshirani, R. (1996). Regression shrinkage and selection via the lasso. Journal of Royal Statistical Society:Series B (methodology), 67(1): 91-108.<br>
+<a name="4">[4]</a> Zou, H. and Hastie, T. (2005). Regularization and variable selection via the elastic net. Journal of Royal Statistical Society: Series B (methodology), 67(2): 301-320.<br>
+<a name="5">[5]</a> Raftery, A. E., Madigan, D., & Hoeting, J. A. (1997). Bayesian model averaging for linear regression models. Journal of the American Statistical Association, 92(437), 179-191.<br>
+
+```{r entrega_profesor,cache=TRUE, warning=FALSE, echo=FALSE, message=FALSE, results = 'hide'}
+lm_bma<-lm(y~x10+x13+x20+x23+x25+x31,data=dtDatNoCollinearity)
+summary(lm_bma)
+
+dfX <- read.table("datasetx.csv", header = TRUE, sep=",", encoding = "UTF-8", stringsAsFactors=FALSE);
+dfX$id<-NULL
+dfX %>% select(x10,x13,x20,x23,x25,x31)->dfX
+y_send <-lm_bma %>% predict(tail(dfX,25))
+y_send$y<-y_send
+write.csv(y_send$y,"C:/Users/User/Desktop/MAESTRIA/SEMESTRE_II/EC1209 - MÉTODOS ESTADÍSTICOS AVANZADOS EN CIENCIAS DE LOS DATOS/y_continua.csv", row.names = FALSE)
+```
