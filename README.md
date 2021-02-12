@@ -26,3 +26,22 @@ Distribuidos de la siguiente forma:
   3. y_binaria.csv
   
   **Nota:** la actividad corresponde al documento *task.pdf*.
+
+
+
+
+clean_data<- function(X) {
+    X <- str_to_upper(X, locale = "es")
+    X <- str_replace_all(X,"[_]", " ")
+    X <- str_replace_all(X,"[\\s]+", " ")
+    X <- str_replace_all(X,"\\s+$", "")
+    X <- str_replace_all(X,"`", "'")
+    X <- str_replace_all(X,"´", "'")
+    X <- str_replace_all(X,"Ã±", "Ñ")
+    X <- str_replace_all(X,"Ã©", "É")
+    X <- str_replace_all(X,"Ã-", "Í")
+    X <- str_replace_all(X,"Ã", "Í")
+    X <- str_trim(X, side = "both")
+    X <- chartr('ÁÉÍÓÚ','AEIOU',X)
+    return(X)
+  }
